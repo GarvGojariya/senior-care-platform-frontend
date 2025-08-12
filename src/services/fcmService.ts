@@ -1,33 +1,36 @@
 import apiService from './api';
 import type { RegisterFCMTokenRequest, FCMToken } from '../types/notification';
+import { initializeMessaging } from '../lib/firebase';
+import { getToken } from 'firebase/messaging';
 
 class FCMService {
   async registerToken(tokenData: RegisterFCMTokenRequest): Promise<{ message: string; success: boolean }> {
-    return apiService.post('/notifications/register-fcm-token', tokenData);
+    return apiService.post("/notifications/push/register-token", tokenData);
   }
 
   async unregisterToken(token: string): Promise<{ message: string; success: boolean }> {
-    return apiService.post('/notifications/unregister-fcm-token', { token });
+    return apiService.post("/notifications/push/unregister-token", { token });
   }
 
   async getUserTokens(): Promise<{ data: FCMToken[] }> {
-    return apiService.get('/notifications/fcm-tokens');
+    return apiService.get("/notifications/push/tokens");
   }
 
   // Get FCM token from browser
   async getFCMToken(): Promise<string | null> {
     try {
-      // Check if Firebase is available
-      if (typeof window !== 'undefined' && 'firebase' in window) {
-        const messaging = (window as any).firebase.messaging();
-        const token = await messaging.getToken({
-          vapidKey: process.env.REACT_APP_FIREBASE_VAPID_KEY,
-        });
-        return token;
+      const messaging = await initializeMessaging();
+      if (!messaging) {
+        console.warn('Firebase messaging is not supported');
+        return null;
       }
-      return null;
+
+      const token = await getToken(messaging, {
+        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY,
+      });
+      return token;
     } catch (error) {
-      console.error('Error getting FCM token:', error);
+      console.log('Error getting FCM token:', error);
       return null;
     }
   }
@@ -52,8 +55,24 @@ class FCMService {
   }
 
   // Check if FCM is supported
-  isFCMSupported(): boolean {
-    return typeof window !== 'undefined' && 'firebase' in window;
+  async isFCMSupported(): Promise<boolean> {
+    try {
+      const messaging = await initializeMessaging();
+      return messaging !== null;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // Check if a token is already registered for the current user
+  async isTokenRegistered(token: string): Promise<boolean> {
+    try {
+      const response = await this.getUserTokens();
+      return response.data.some((tokenData) => tokenData.token === token);
+    } catch (error) {
+      console.error('Error checking if token is registered:', error);
+      return false;
+    }
   }
 }
 

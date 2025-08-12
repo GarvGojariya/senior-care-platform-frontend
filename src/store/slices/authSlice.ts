@@ -2,6 +2,21 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import type { PayloadAction } from '@reduxjs/toolkit';
 import type { User, LoginRequest, RegisterCaregiverRequest, ChangePasswordRequest } from '../../types/auth';
 import { authService } from '../../services/authService';
+import { fcmService } from '../../services/fcmService';
+
+// Helper function to get user from localStorage
+const getUserFromStorage = (): User | null => {
+  const userStr = localStorage.getItem('user');
+  if (userStr) {
+    try {
+      return JSON.parse(userStr);
+    } catch (error) {
+      console.warn('Failed to parse user from localStorage:', error);
+      return null;
+    }
+  }
+  return null;
+};
 
 // Async thunks
 export const loginUser = createAsyncThunk(
@@ -9,6 +24,39 @@ export const loginUser = createAsyncThunk(
   async (credentials: LoginRequest, { rejectWithValue }) => {
     try {
       const response = await authService.login(credentials);
+      
+      // After successful login, register FCM token
+      if (response.data?.user?.id) {
+        try {
+          // Check if FCM is supported
+          if (fcmService.isFCMSupported() && fcmService.isNotificationSupported()) {
+            // Request notification permission
+            const permissionGranted = await fcmService.requestNotificationPermission();
+            
+            if (permissionGranted) {
+              // Get FCM token
+              const token = await fcmService.getFCMToken();
+              
+              if (token) {
+                // Register token with backend
+                const deviceInfo = {
+                  token,
+                  deviceId: `web-${response.data.user.id}`,
+                  deviceType: 'WEB' as const,
+                  appVersion: '1.0.0',
+                };
+                
+                await fcmService.registerToken(deviceInfo);
+                console.log('FCM token registered successfully');
+              }
+            }
+          }
+        } catch (fcmError) {
+          console.warn('Failed to register FCM token:', fcmError);
+          // Don't fail login if FCM registration fails
+        }
+      }
+      
       return response.data;
     } catch (error: any) {
       return rejectWithValue(error.response?.data?.message || 'Login failed');
@@ -86,7 +134,7 @@ interface AuthState {
 }
 
 const initialState: AuthState = {
-  user: null,
+  user: getUserFromStorage(),
   accessToken: localStorage.getItem('accessToken'),
   refreshToken: localStorage.getItem('refreshToken'),
   isAuthenticated: !!localStorage.getItem('accessToken'),
@@ -99,6 +147,19 @@ const authSlice = createSlice({
   initialState,
   reducers: {
     logout: (state) => {
+      // Clean up FCM token on logout
+      if (fcmService.isFCMSupported()) {
+        fcmService.getFCMToken().then(token => {
+          if (token) {
+            fcmService.unregisterToken(token).catch(error => {
+              console.warn('Failed to unregister FCM token:', error);
+            });
+          }
+        }).catch(error => {
+          console.warn('Failed to get FCM token for cleanup:', error);
+        });
+      }
+      
       state.user = null;
       state.accessToken = null;
       state.refreshToken = null;
@@ -119,6 +180,17 @@ const authSlice = createSlice({
       if (state.user) {
         state.user = { ...state.user, ...action.payload };
       }
+    },
+    initializeAuth: (state) => {
+      // Reinitialize auth state from localStorage
+      const user = getUserFromStorage();
+      const accessToken = localStorage.getItem('accessToken');
+      const refreshToken = localStorage.getItem('refreshToken');
+      
+      state.user = user;
+      state.accessToken = accessToken;
+      state.refreshToken = refreshToken;
+      state.isAuthenticated = !!accessToken;
     },
   },
   extraReducers: (builder) => {
@@ -224,5 +296,5 @@ const authSlice = createSlice({
   },
 });
 
-export const { logout, clearError, setUser, updateUser } = authSlice.actions;
+export const { logout, clearError, setUser, updateUser, initializeAuth } = authSlice.actions;
 export default authSlice.reducer;

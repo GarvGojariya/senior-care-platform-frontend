@@ -1,4 +1,47 @@
-# React + TypeScript + Vite
+# Senior Care Platform Frontend
+
+A React + TypeScript + Vite application for managing senior care services with Firebase Cloud Messaging (FCM) integration.
+
+## Firebase Setup
+
+To use Firebase Cloud Messaging (FCM), you need to configure the following environment variables:
+
+Create a `.env` file in the root directory with:
+
+```env
+# Firebase Configuration
+VITE_FIREBASE_API_KEY=your-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+VITE_FIREBASE_MESSAGING_SENDER_ID=123456789
+VITE_FIREBASE_APP_ID=1:123456789:web:abcdef123456
+
+# Firebase VAPID Key for FCM
+VITE_FIREBASE_VAPID_KEY=your-vapid-key
+```
+
+### Getting Firebase Configuration
+
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Create a new project or select an existing one
+3. Go to Project Settings > General
+4. Scroll down to "Your apps" section
+5. Click "Add app" and select Web
+6. Copy the configuration object values to your `.env` file
+
+### Getting VAPID Key
+
+1. In Firebase Console, go to Project Settings > Cloud Messaging
+2. Scroll down to "Web configuration" section
+3. Generate a new key pair if you don't have one
+4. Copy the "Key pair" value to `VITE_FIREBASE_VAPID_KEY`
+
+### Service Worker
+
+The Firebase messaging service worker is located at `public/firebase-messaging-sw.js`. Make sure to update the Firebase configuration in this file with your actual values.
+
+## Development
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
